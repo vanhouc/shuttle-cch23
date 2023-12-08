@@ -12,6 +12,7 @@ use base64::{
     Engine,
 };
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 async fn hello_world() -> &'static str {
     "Hello, world!"
@@ -134,17 +135,81 @@ async fn elf(body: String) -> Json<ElfCount> {
 }
 
 async fn cookie(headers: HeaderMap) -> Result<String> {
+    extract_cookie_header(&headers)
+}
+
+fn extract_cookie_header(headers: &HeaderMap) -> Result<String> {
     let cookie_b64 = headers
         .get("cookie")
         .ok_or(StatusCode::BAD_REQUEST)?
         .to_str()
         .map_err(|_| StatusCode::BAD_REQUEST)?
         .trim_start_matches("recipe=");
+    info!("cookie b64: {cookie_b64}");
     let cookie_bytes = general_purpose::STANDARD
         .decode(cookie_b64)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
     let cookie_string = String::from_utf8(cookie_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
     Ok(cookie_string)
+}
+
+#[derive(Deserialize)]
+struct BakingRequest {
+    recipe: Ingredients,
+    pantry: Ingredients,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Ingredients {
+    flour: u32,
+    sugar: u32,
+    butter: u32,
+    #[serde(rename = "baking powder")]
+    baking_powder: u32,
+    #[serde(rename = "chocolate chips")]
+    chocolate_chips: u32,
+}
+
+#[derive(Serialize)]
+struct BakingResult {
+    cookies: u32,
+    pantry: Ingredients,
+}
+
+impl BakingResult {
+    fn from_request(request: BakingRequest) -> BakingResult {
+        let recipe = request.recipe;
+        let pantry = request.pantry;
+        let cookies = [
+            pantry.flour / recipe.flour,
+            pantry.sugar / recipe.sugar,
+            pantry.butter / recipe.butter,
+            pantry.baking_powder / recipe.baking_powder,
+            pantry.chocolate_chips / recipe.chocolate_chips,
+        ]
+        .into_iter()
+        .min()
+        // Unwrap is safe here because we have a static array that cannot be empty
+        .unwrap();
+        Self {
+            cookies,
+            pantry: Ingredients {
+                flour: pantry.flour - recipe.flour * cookies,
+                sugar: pantry.sugar - recipe.sugar * cookies,
+                butter: pantry.butter - recipe.butter * cookies,
+                baking_powder: pantry.baking_powder - recipe.baking_powder * cookies,
+                chocolate_chips: pantry.chocolate_chips - recipe.chocolate_chips * cookies,
+            },
+        }
+    }
+}
+
+async fn bake(headers: HeaderMap) -> Result<Json<BakingResult>> {
+    let cookie_string = extract_cookie_header(&headers)?;
+    info!("cookie string: {cookie_string}");
+    let request = serde_json::from_str::<BakingRequest>(&cookie_string)
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    Ok(Json(BakingResult::from_request(request)))
 }
 
 #[shuttle_runtime::main]
@@ -156,6 +221,7 @@ async fn main() -> shuttle_axum::ShuttleAxum {
         .route("/4/strength", post(strength))
         .route("/4/contest", post(contest))
         .route("/6", post(elf))
-        .route("/7/decode", get(cookie));
+        .route("/7/decode", get(cookie))
+        .route("/7/bake", get(bake));
     Ok(router.into())
 }
