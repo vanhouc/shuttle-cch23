@@ -109,6 +109,17 @@ async fn contest(Json(reindeer): Json<Vec<Reindeer>>) -> Result<Json<Competition
     Ok(Json(results))
 }
 
+#[derive(Serialize)]
+struct ElfCount {
+    elf: usize,
+}
+
+async fn elf(elf: String) -> Json<ElfCount> {
+    Json(ElfCount {
+        elf: elf.matches("elf").count(),
+    })
+}
+
 #[shuttle_runtime::main]
 async fn main() -> shuttle_axum::ShuttleAxum {
     let router = Router::new()
@@ -116,6 +127,7 @@ async fn main() -> shuttle_axum::ShuttleAxum {
         .route("/-1/error", get(hello_error))
         .route("/1/*nums", get(nums))
         .route("/4/strength", post(strength))
-        .route("/4/contest", post(contest));
+        .route("/4/contest", post(contest))
+        .route("/6", post(elf));
     Ok(router.into())
 }
