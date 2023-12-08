@@ -2,10 +2,14 @@ use std::fmt::Display;
 
 use axum::{
     extract::Path,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{ErrorResponse, Result},
     routing::{get, post},
     Json, Router,
+};
+use base64::{
+    engine::general_purpose::{self},
+    Engine,
 };
 use serde::{Deserialize, Serialize};
 
@@ -129,6 +133,20 @@ async fn elf(body: String) -> Json<ElfCount> {
     })
 }
 
+async fn cookie(headers: HeaderMap) -> Result<String> {
+    let cookie_b64 = headers
+        .get("cookie")
+        .ok_or(StatusCode::BAD_REQUEST)?
+        .to_str()
+        .map_err(|_| StatusCode::BAD_REQUEST)?
+        .trim_start_matches("recipe=");
+    let cookie_bytes = general_purpose::STANDARD
+        .decode(cookie_b64)
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let cookie_string = String::from_utf8(cookie_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+    Ok(cookie_string)
+}
+
 #[shuttle_runtime::main]
 async fn main() -> shuttle_axum::ShuttleAxum {
     let router = Router::new()
@@ -137,6 +155,7 @@ async fn main() -> shuttle_axum::ShuttleAxum {
         .route("/1/*nums", get(nums))
         .route("/4/strength", post(strength))
         .route("/4/contest", post(contest))
-        .route("/6", post(elf));
+        .route("/6", post(elf))
+        .route("/7/decode", get(cookie));
     Ok(router.into())
 }
