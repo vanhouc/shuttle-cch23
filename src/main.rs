@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use axum::{
     extract::Path,
@@ -155,8 +155,23 @@ fn extract_cookie_header(headers: &HeaderMap) -> Result<String> {
 
 #[derive(Deserialize)]
 struct BakingRequest {
-    recipe: Ingredients,
-    pantry: Ingredients,
+    recipe: HashMap<String, u32>,
+    pantry: HashMap<String, u32>,
+}
+
+impl TryFrom<&HeaderMap> for BakingRequest {
+    type Error = ErrorResponse;
+
+    fn try_from(value: &HeaderMap) -> Result<Self, Self::Error> {
+        let cookie_string = extract_cookie_header(value)?;
+        let request: BakingRequest = serde_json::from_str(&cookie_string).map_err(|err| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("failed to parse baking request, err: {err}"),
+            )
+        })?;
+        Ok(request)
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -170,37 +185,44 @@ struct Ingredients {
     chocolate_chips: u32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 struct BakingResult {
     cookies: u32,
-    pantry: Ingredients,
+    pantry: HashMap<String, u32>,
 }
 
 impl BakingResult {
-    fn from_request(request: BakingRequest) -> BakingResult {
-        let recipe = request.recipe;
-        let pantry = request.pantry;
-        let cookies = [
-            pantry.flour / recipe.flour,
-            pantry.sugar / recipe.sugar,
-            pantry.butter / recipe.butter,
-            pantry.baking_powder / recipe.baking_powder,
-            pantry.chocolate_chips / recipe.chocolate_chips,
-        ]
-        .into_iter()
-        .min()
-        // Unwrap is safe here because we have a static array that cannot be empty
-        .unwrap();
-        Self {
-            cookies,
-            pantry: Ingredients {
-                flour: pantry.flour - recipe.flour * cookies,
-                sugar: pantry.sugar - recipe.sugar * cookies,
-                butter: pantry.butter - recipe.butter * cookies,
-                baking_powder: pantry.baking_powder - recipe.baking_powder * cookies,
-                chocolate_chips: pantry.chocolate_chips - recipe.chocolate_chips * cookies,
-            },
-        }
+    fn from_request(request: BakingRequest) -> Self {
+        let cookies = request
+            .recipe
+            .iter()
+            .map(|(name, quantity)| {
+                if let Some(stock) = request.pantry.get(name) {
+                    stock / quantity
+                } else {
+                    0
+                }
+            })
+            .min();
+        let Some(cookies) = cookies else {
+            return Self {
+                cookies: 0,
+                pantry: request.pantry,
+            };
+        };
+        let pantry =
+            request
+                .pantry
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (name, quantity)| {
+                    if let Some(recipe_quantity) = request.recipe.get(&name) {
+                        acc.insert(name, quantity - *recipe_quantity * cookies);
+                    } else {
+                        acc.insert(name, quantity);
+                    }
+                    acc
+                });
+        Self { cookies, pantry }
     }
 }
 
