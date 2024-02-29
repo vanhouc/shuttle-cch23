@@ -23,7 +23,7 @@ async fn hello_error() -> StatusCode {
 }
 
 async fn nums(Path(nums): Path<String>) -> Result<String> {
-    let ids: Vec<u32> = nums
+    let ids: Vec<i64> = nums
         .split('/')
         .map(|id| {
             id.parse()
