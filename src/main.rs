@@ -1,7 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
 use axum::{
-    extract::Path,
     http::{HeaderMap, StatusCode},
     response::{ErrorResponse, Result},
     routing::{get, post},
@@ -14,30 +13,9 @@ use base64::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-async fn hello_world() -> &'static str {
-    "Hello, world!"
-}
+mod day0;
+mod day1;
 
-async fn hello_error() -> StatusCode {
-    StatusCode::INTERNAL_SERVER_ERROR
-}
-
-async fn nums(Path(nums): Path<String>) -> Result<String> {
-    let ids: Vec<i64> = nums
-        .split('/')
-        .map(|id| {
-            id.parse()
-                .map_err(|_| ErrorResponse::from(StatusCode::BAD_REQUEST))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let response = ids
-        .into_iter()
-        .reduce(|acc, id| acc ^ id)
-        .ok_or(StatusCode::BAD_REQUEST)?
-        .pow(3)
-        .to_string();
-    Ok(response)
-}
 #[derive(Deserialize)]
 struct ReindeerSummary {
     // name: String,
@@ -237,9 +215,9 @@ async fn bake(headers: HeaderMap) -> Result<Json<BakingResult>> {
 #[shuttle_runtime::main]
 async fn main() -> shuttle_axum::ShuttleAxum {
     let router = Router::new()
-        .route("/", get(hello_world))
-        .route("/-1/error", get(hello_error))
-        .route("/1/*nums", get(nums))
+        .route("/", get(day0::hello_world))
+        .route("/-1/error", get(day0::hello_error))
+        .route("/1/*nums", get(day1::nums))
         .route("/4/strength", post(strength))
         .route("/4/contest", post(contest))
         .route("/6", post(elf))
