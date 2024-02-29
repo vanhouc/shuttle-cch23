@@ -25,7 +25,7 @@ pub struct Reindeer {
     height: u32,
     antler_width: u32,
     snow_magic_power: u32,
-    // favorite_food: String,
+    favorite_food: String,
     #[serde(rename = "cAnD13s_3ATeN-yesT3rdAy")]
     candies_eaten_yesterday: u32,
 }
@@ -74,7 +74,10 @@ pub async fn contest(Json(reindeer): Json<Vec<Reindeer>>) -> Result<Json<Competi
             "{magician} could blast you away with a snow magic power of {magic}",
             magic = magician.snow_magic_power
         ),
-        consumer: format!("{consumer} ate lots of candies, but also some grass"),
+        consumer: format!(
+            "{consumer} ate lots of candies, but also some {favorite_food}",
+            favorite_food = consumer.favorite_food
+        ),
     };
     Ok(Json(results))
 }
